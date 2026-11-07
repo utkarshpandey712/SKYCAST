@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{{TITLE}}</title>
+    <meta name="description" content="{{DESCRIPTION}}">
+    <link rel="canonical" href="{{CANONICAL}}">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="SkyCast">
+    <meta property="og:title" content="{{TITLE}}">
+    <meta property="og:description" content="{{DESCRIPTION}}">
+    <meta property="og:url" content="{{CANONICAL}}">
+    <meta property="og:image" content="{{BASE_URL}}/og-image.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{TITLE}}">
+    <meta name="twitter:description" content="{{DESCRIPTION}}">
+    <meta name="twitter:image" content="{{BASE_URL}}/og-image.png">
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="">
+    <link rel="stylesheet" href="/style.css">
+
+    <script>
+        // Apply saved theme before first paint (prevents a white flash in dark mode)
+        (function () {
+            try {
+                var t = localStorage.getItem("skycast.theme");
+                if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+                document.documentElement.setAttribute("data-theme", t);
+            } catch (e) {}
+        })();
+    </script>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "SkyCast",
+      "url": "{{BASE_URL}}/",
+      "applicationCategory": "WeatherApplication",
+      "operatingSystem": "Any",
+      "description": "Live weather, hourly and 5-day forecast for any city.",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" }
+    }
+    </script>
+</head>
+<body data-initial-city="{{CITY}}">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+    <div class="container header-inner">
+        <a class="brand" href="/" aria-label="SkyCast home"><span class="brand-mark" aria-hidden="true">☀</span><span>SkyCast</span></a>
+        <nav class="nav" aria-label="Main">
+            <a href="#favourites">Favourites</a>
+            <a href="#map">Live map</a>
+            <a href="#popular">Popular cities</a>
+            <a href="#faq">FAQ</a>
+        </nav>
+        <div class="header-actions">
+            <div class="unit-toggle" role="group" aria-label="Temperature unit">
+                <button type="button" id="unitC" class="active" aria-pressed="true">°C</button>
+                <button type="button" id="unitF" aria-pressed="false">°F</button>
+            </div>
+            <button type="button" id="themeToggle" class="icon-btn" aria-label="Switch dark / light mode" title="Dark / Light mode">🌙</button>
+        </div>
+    </div>
+</header>
+
+<main id="main" class="container">
+    <section class="search-section">
+        <h1 id="pageTitle">{{H1}}</h1>
+        <form id="searchForm" class="search-form" autocomplete="off" role="search">
+            <div class="search-box">
+                <span class="search-icon" aria-hidden="true">⌕</span>
+                <input id="cityInput" type="text" inputmode="search" placeholder="Search city, e.g. Lucknow, Delhi, London"
+                       aria-label="City name" aria-autocomplete="list" aria-controls="suggestions" maxlength="60">
+                <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
+            </div>
+            <button type="submit" class="btn primary">Search</button>
+            <button type="button" id="locateBtn" class="btn" title="Use my current location">📍 <span class="hide-sm">My location</span></button>
+        </form>
+        <div id="message" class="message" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="favourites" class="favourites" aria-label="Favourite cities">
+        <h2 class="mini-title">⭐ Favourite cities</h2>
+        <div id="favList" class="chips"><span class="muted">No favourites yet. Search a city and tap the star.</span></div>
+    </section>
+
+    <section class="hero" id="hero" aria-live="polite">
+        <div class="fx" id="fx" aria-hidden="true"></div>
+        <div class="hero-body">
+            <div class="hero-copy">
+                <p class="eyebrow">Current weather</p>
+                <h2 id="placeName">Loading weather…</h2>
+                <p id="placeMeta" class="hero-meta">Please wait</p>
+                <div class="temp-row">
+                    <span id="temperature" class="temperature">--°</span>
+                    <div>
+                        <div id="condition" class="condition">Getting conditions</div>
+                        <div id="feelsLike" class="feels-like">Feels like --°</div>
+                    </div>
+                </div>
+                <p id="updatedAt" class="updated-at">—</p>
+            </div>
+            <div class="hero-side">
+                <div id="weatherIcon" class="weather-icon" aria-hidden="true">🌤️</div>
+                <button type="button" id="favBtn" class="btn fav-btn" aria-pressed="false">☆ Save city</button>
+            </div>
+        </div>
+    </section>
+
+    <section aria-labelledby="highlightsTitle">
+        <div class="section-heading"><h2 id="highlightsTitle">Today’s highlights</h2><span class="muted" id="timezone"></span></div>
+        <div class="metrics">
+            <article class="card metric"><div class="metric-top"><span>Humidity</span><span aria-hidden="true">💧</span></div><strong id="humidity">--</strong><p>Relative humidity</p></article>
+            <article class="card metric"><div class="metric-top"><span>Wind speed</span><span aria-hidden="true">🌬️</span></div><strong id="wind">--</strong><p id="windDir">Near-surface wind</p></article>
+            <article class="card metric"><div class="metric-top"><span>UV index</span><span aria-hidden="true">🕶️</span></div><strong id="uv">--</strong><p id="uvLabel">Max today</p></article>
+            <article class="card metric"><div class="metric-top"><span>Precipitation</span><span aria-hidden="true">☔</span></div><strong id="rain">--</strong><p id="rainChance">Current precipitation</p></article>
+            <article class="card metric"><div class="metric-top"><span>Pressure</span><span aria-hidden="true">🧭</span></div><strong id="pressure">--</strong><p>Surface pressure</p></article>
+            <article class="card metric sun-card">
+                <div class="metric-top"><span>Sunrise &amp; sunset</span><span aria-hidden="true">🌅</span></div>
+                <svg id="sunArc" viewBox="0 0 200 105" class="sun-arc" role="img" aria-label="Sun position today">
+                    <path d="M10 95 A90 90 0 0 1 190 95" class="arc-bg"/>
+                    <path id="arcDone" d="M10 95 A90 90 0 0 1 190 95" class="arc-done" pathLength="100" stroke-dasharray="0 100"/>
+                    <circle id="sunDot" cx="10" cy="95" r="7" class="sun-dot"/>
+                </svg>
+                <div class="sun-times"><span>↑ <b id="sunrise">--</b></span><span id="dayLength" class="muted"></span><span>↓ <b id="sunset">--</b></span></div>
+            </article>
+        </div>
+    </section>
+
+    <section class="two-col">
+        <article class="card panel">
+            <div class="section-heading"><h2>Hourly forecast</h2><span class="badge">Next 24 hours</span></div>
+            <div id="hourlyForecast" class="hourly-list" tabindex="0" aria-label="Hourly forecast, scrollable"><p class="muted">Loading hourly forecast…</p></div>
+        </article>
+        <article class="card panel">
+            <div class="section-heading"><h2>5-day forecast</h2></div>
+            <div id="dailyForecast" class="daily-list"><p class="muted">Loading forecast…</p></div>
+        </article>
+    </section>
+
+    <section id="map" class="block map-section" aria-labelledby="mapTitle">
+        <div class="section-heading"><h2 id="mapTitle">Live weather map</h2><span class="muted">Tap anywhere on the map to see its weather</span></div>
+        <div class="card map-card">
+            <div id="liveMap" class="live-map" role="application" aria-label="Interactive world weather map"></div>
+            <div class="map-controls">
+                <button type="button" id="radarPlay" class="btn small" aria-label="Play or pause radar animation">⏸ Pause</button>
+                <input type="range" id="radarSlider" min="0" max="0" value="0" aria-label="Radar time">
+                <span id="radarLabel" class="muted">Loading rain radar…</span>
+                <label class="toggle"><input type="checkbox" id="radarToggle" checked> Rain radar</label>
+            </div>
+        </div>
+    </section>
+
+    <section id="popular" class="block">
+        <h2>Popular cities</h2>
+        <ul class="city-links">
+            <li><a href="/weather/lucknow">Lucknow</a></li><li><a href="/weather/delhi">Delhi</a></li>
+            <li><a href="/weather/mumbai">Mumbai</a></li><li><a href="/weather/kolkata">Kolkata</a></li>
+            <li><a href="/weather/chennai">Chennai</a></li><li><a href="/weather/bengaluru">Bengaluru</a></li>
+            <li><a href="/weather/hyderabad">Hyderabad</a></li><li><a href="/weather/pune">Pune</a></li>
+            <li><a href="/weather/ahmedabad">Ahmedabad</a></li><li><a href="/weather/jaipur">Jaipur</a></li>
+            <li><a href="/weather/kanpur">Kanpur</a></li><li><a href="/weather/varanasi">Varanasi</a></li>
+            <li><a href="/weather/patna">Patna</a></li><li><a href="/weather/bhopal">Bhopal</a></li>
+            <li><a href="/weather/chandigarh">Chandigarh</a></li><li><a href="/weather/indore">Indore</a></li>
+            <li><a href="/weather/surat">Surat</a></li><li><a href="/weather/nagpur">Nagpur</a></li>
+            <li><a href="/weather/prayagraj">Prayagraj</a></li><li><a href="/weather/agra">Agra</a></li>
+            <li><a href="/weather/gorakhpur">Gorakhpur</a></li><li><a href="/weather/dehradun">Dehradun</a></li>
+            <li><a href="/weather/noida">Noida</a></li><li><a href="/weather/ranchi">Ranchi</a></li>
+            <li><a href="/weather/goa">Goa</a></li><li><a href="/weather/london">London</a></li>
+            <li><a href="/weather/new-york">New York</a></li><li><a href="/weather/dubai">Dubai</a></li>
+            <li><a href="/weather/singapore">Singapore</a></li><li><a href="/weather/tokyo">Tokyo</a></li>
+        </ul>
+    </section>
+    <section class="block about">
+        <h2>About SkyCast</h2>
+        <p>SkyCast is a free weather website that shows live conditions and forecasts for any city in the world.
+        Search a city to see the current temperature, what it feels like, humidity, wind speed, UV index,
+        sunrise and sunset times, an hourly forecast for the next 24 hours and a 5-day outlook. Save your
+        favourite cities for one-tap access, switch between Celsius and Fahrenheit, and use dark or light mode.</p>
+    </section><style>
+    body {
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+    }
+    .main-container {
+        min-height: auto !important;
+        height: auto !important;
+    }
+</style>
+
+    <section id="faq" class="block faq">
+        <h2>Frequently asked questions</h2>
+        <details><summary>Where does SkyCast get its weather data?</summary>
+            <p>Weather and location data come from Open-Meteo, an open weather data service that combines national weather models.</p></details>
+        <details><summary>How often is the weather updated?</summary>
+            <p>Forecasts are refreshed from the source every few minutes whenever you search or reload a city.</p></details>
+        <details><summary>How do I switch between Celsius and Fahrenheit?</summary>
+            <p>Use the °C / °F switch at the top right. Your choice is remembered on your device.</p></details>
+        <details><summary>Can I see the weather for my current location?</summary>
+            <p>Yes. Tap “My location” and allow location access in your browser. Your location is only used to fetch the weather.</p></details>
+    </section>
+</main>
+
+<footer class="site-footer">
+    <div class="container footer-inner">
+        <span>© <span id="year">2026</span> SkyCast Weather</span>
+        <span>Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></span>
+    </div>
+</footer>
+
+<noscript><p class="container">SkyCast needs JavaScript to load live weather. Please enable JavaScript.</p></noscript>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="" defer></script>
+<script src="/script.js" defer></script>
+<!-- Leaflet JS CDN -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    // 1. Map initialize karein
+    var map = L.map('livemap', {
+        worldCopyJump: true
+    }).setView([20, 0], 2);
+
+    // 2. 100% Free & No API Key Required Tile Layer (OpenStreetMap Carto / Standard)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        noWrap: true
+    }).addTo(map);
+
+    var currentMarker = null;
+
+    // 3. Search karne par marker aur smooth zoom ke liye function
+    function updateMapMarker(lat, lon, cityName, temp) {
+        if (currentMarker) {
+            map.removeLayer(currentMarker);
+        }
+        
+        currentMarker = L.marker([lat, lon]).addTo(map)
+            .bindPopup(`<div style="font-family: sans-serif; text-align: center;">
+                            <b style="font-size: 14px; color: #1e3a8a;">${cityName}</b><br>
+                            <span style="font-size: 16px; font-weight: bold; color: #f59e0b;">${temp}°C</span>
+                        </div>`)
+            .openPopup();
+
+        map.flyTo([lat, lon], 10, {
+            animate: true,
+            duration: 1.5
+        });
+    }
+</script>
+var map = L.map('map', {
+    worldCopyJump: true
+}).setView([20, 0], 2);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap contributors',
+    noWrap: true
+}).addTo(map);
+
+// Yeh line ensure karegi ki map container ki nayi size/height ko turant pakad le
+setTimeout(function() {
+    map.invalidateSize();
+}, 200);
+</body>
+</html>
